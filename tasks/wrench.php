@@ -2,7 +2,7 @@
 
 namespace Fuel\Tasks;
 
-class Assets
+class Wrench
 {
 	public static function run()
 	{
