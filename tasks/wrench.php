@@ -6,14 +6,26 @@ class Wrench
 {
 	public static function run()
 	{
-		passthru('coffee -o public/assets/js/ -c public/assets/coffee/');
-		passthru('sass --update public/assets/sass:public/assets/css');
-		\Cli::write('Coffee and SaSS files compiled', 'green');
+		\Config::load('wrench', true);
+		foreach (\Config::get('wrench.coffee', []) as $coffee)
+		{
+			\Cli::write('coffeescript '.$coffee['source'].' => '.$coffee['target']);
+			passthru('coffee -o '.$coffee['target'].' -c '.$coffee['source']);
+		}
+
+		foreach (\Config::get('wrench.sass', []) as $sass)
+		{
+			\Cli::write('sass '.$sass['source'].' => '.$sass['target']);
+			passthru('sass --update '.$sass['source'].':'.$sass['target']);
+		}
+
+		\Cli::write('Coffee and sass files compiled', 'green');
 	}
 
 	public static function watch()
 	{
-		\Cli::write('Now watching public/assets/coffee and public/assets/sass');
+		\Cli::write('Now watching for coffeescript and sass file changes');
+		\Cli::write('Add directories by editing the wrench config');
 		\Cli::write('Ctl C to quit');
 		$descriptorspec = [
 			0 => ['pipe', 'r'],
@@ -21,15 +33,31 @@ class Wrench
 			2 => ['file', '/tmp/error-output.txt', 'a']
 		];
 
-		$coffee_process = proc_open('coffee -o public/assets/js/ -cw public/assets/coffee/', $descriptorspec, $pipes);
-		$sass_process = proc_open('sass --watch public/assets/sass:public/assets/css', $descriptorspec, $pipes2);
-
-		$running = true;
-		while ($running)
+		$processes = [];
+		$pipes = [];
+		\Config::load('wrench', true);
+		foreach (\Config::get('wrench.coffee', []) as $coffee)
 		{
-			$a = proc_get_status($coffee_process);
-			$b = proc_get_status($sass_process);
-			$running = $a['running'] && $b['running'];
+			\Cli::write(\Cli::color('[coffee] ', 'blue').\Cli::color($coffee['source'], 'green').' => '.\Cli::color($coffee['target'], 'white'));
+			$pipes[] = '';
+			$processes[] = proc_open('coffee -o '.$coffee['target'].' -cw '.$coffee['source'], $descriptorspec, $pipes[count($pipes) - 1]);
+		}
+
+		foreach (\Config::get('wrench.sass', []) as $sass)
+		{
+			\Cli::write(\Cli::color('[sass] ', 'yellow').\Cli::color($sass['source'], 'green').' => '.\Cli::color($sass['target'], 'white'));
+			$pipes[] = '';
+			$processes[] = proc_open('sass --watch '.$sass['source'].':'.$sass['target'], $descriptorspec, $pipes[count($pipes) - 1]);
+		}
+
+		while (true)
+		{
+			// loop through all the processes and exit if any has died
+			foreach ($processes as $process)
+			{
+				proc_get_status($process) or exit();
+			}
+			// sleep for a bit so the system isn't using a lot more resources
 			sleep(2);
 		}
 	}
